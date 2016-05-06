@@ -247,7 +247,8 @@ results, but can be slower than `go-packages-native'."
   :package-version '(go-mode . 1.4.0)
   :group 'go)
 
-(defcustom go-guess-gopath-functions (list #'go-godep-gopath
+(defcustom go-guess-gopath-functions (list #'go-glide-gopath
+					   #'go-godep-gopath
                                            #'go-wgo-gopath
                                            #'go-gb-gopath
                                            #'go-plain-gopath)
@@ -1963,6 +1964,12 @@ addition to ordinary uses of GOPATH."
   "Detect a normal GOPATH, by looking for the first `src'
 directory up the directory tree."
   (let ((d (locate-dominating-file buffer-file-name "src")))
+    (if d
+        (list d))))
+
+(defun go-glide-gopath ()
+  "Detect a glide project"
+  (let* ((d (locate-dominating-file buffer-file-name "vendor")))
     (if d
         (list d))))
 
