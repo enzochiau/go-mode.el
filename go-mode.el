@@ -2035,7 +2035,7 @@ switching projects."
   (interactive)
   (let ((gopath (or (go-guess-gopath buffer)
                     (go-original-gopath))))
-    (setenv "GOPATH" gopath)
+    (setenv "GOPATH" (concat (go-original-gopath) path-separator gopath))
     (message "Set GOPATH to %s" gopath)))
 
 (defun go-reset-gopath ()
