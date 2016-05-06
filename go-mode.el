@@ -1971,7 +1971,7 @@ directory up the directory tree."
   "Detect a glide project"
   (let* ((d (locate-dominating-file buffer-file-name "vendor")))
     (if d
-        (list d))))
+        (list (expand-file-name "vendor" d))))
 
 (defun go-godep-gopath ()
   "Detect a Godeps workspace by looking for Godeps/_workspace up
