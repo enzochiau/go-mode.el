@@ -2023,7 +2023,7 @@ addition to ordinary uses of GOPATH."
 
 (defun go-get-path ()
   "Get GOPATH with `go-guess-gopath', if it return nil, get it with `go env GOPATH' command."
-  (or (go-guess-gopath) (process-lines go-command "env" "GOPATH")))
+  (or (go-guess-gopath) (car (process-lines go-command "env" "GOPATH"))))
 
 (defun go-set-root-path ()
   "Set `go-root' and `go-path' variables."
