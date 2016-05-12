@@ -247,6 +247,56 @@ results, but can be slower than `go-packages-native'."
   :package-version '(go-mode . 1.4.0)
   :group 'go)
 
+(defun go-godep-gopath ()
+  "Detect a Godeps workspace by looking for Godeps/_workspace up
+the directory tree. The result is combined with that of
+`go-plain-gopath'."
+  (let* ((d (locate-dominating-file buffer-file-name "Godeps"))
+         (workspace (concat d
+                            (file-name-as-directory "Godeps")
+                            (file-name-as-directory "_workspace"))))
+    (if (and d
+             (file-exists-p workspace))
+        (list workspace
+              (locate-dominating-file buffer-file-name "src")))))
+
+(defun go-gb-gopath ()
+  "Detect a gb project."
+  (or (go--gb-vendor-gopath)
+      (go--gb-vendor-gopath-reverse)))
+
+(defun go--gb-vendor-gopath ()
+  (let* ((d (locate-dominating-file buffer-file-name "src"))
+         (vendor (concat d (file-name-as-directory "vendor"))))
+    (if (and d
+             (file-exists-p vendor))
+        (list d vendor))))
+
+(defun go--gb-vendor-gopath-reverse ()
+  (let* ((d (locate-dominating-file buffer-file-name "vendor"))
+         (src (concat d (file-name-as-directory "src"))))
+    (if (and d
+             (file-exists-p src))
+        (list d (concat d
+                        (file-name-as-directory "vendor"))))))
+
+(defun go-wgo-gopath ()
+  "Detect a wgo project."
+  (or (go--wgo-gocfg "src")
+      (go--wgo-gocfg "vendor")))
+
+(defun go--wgo-gocfg (needle)
+  (let* ((d (locate-dominating-file buffer-file-name needle))
+         (gocfg (concat d (file-name-as-directory ".gocfg"))))
+    (if (and d
+             (file-exists-p gocfg))
+        (with-temp-buffer
+          (insert-file-contents (concat gocfg "gopaths"))
+          (append
+           (mapcar (lambda (el) (concat d (file-name-as-directory el))) (split-string (buffer-string) "\n" t))
+           (list (go-original-gopath)))))))
+
+
 (defcustom go-guess-gopath-functions (list #'go-godep-gopath
                                            #'go-wgo-gopath
                                            #'go-gb-gopath
@@ -1135,9 +1185,7 @@ with goflymake \(see URL `https://github.com/dougm/goflymake'), gocode
         (errbuf (if gofmt-show-errors (get-buffer-create "*Gofmt Errors*")))
         (coding-system-for-read 'utf-8)
         (coding-system-for-write 'utf-8)
-        our-gofmt-args
-	gofmt-full-cmd
-	(go-path (go-guess-gopath)))
+        our-gofmt-args)
 
     (unwind-protect
         (save-restriction
@@ -1168,7 +1216,8 @@ with goflymake \(see URL `https://github.com/dougm/goflymake'), gocode
           ;; We're using errbuf for the mixed stdout and stderr output. This
           ;; is not an issue because gofmt -w does not produce any stdout
           ;; output in case of success.
-          (if (zerop (shell-command gofmt-full-cmd nil errbuf))
+          (if (zerop (let ((process-environment (list* (concat "GOPATH=" go-path) process-environment)))
+		       (apply #'call-process gofmt-command nil errbuf nil our-gofmt-args)))
               (progn
                 (if (zerop (call-process-region (point-min) (point-max) "diff" nil patchbuf nil "-n" "-" tmpfile))
                     (message "Buffer is already gofmted")
@@ -1415,11 +1464,12 @@ uncommented, otherwise a new import will be added."
           ('single (insert "import " line "\n"))
           ('none (insert "\nimport (\n\t" line "\n)\n")))))))
 
-(defun go-root-and-paths ()
-  (let* ((output (process-lines go-command "env" "GOROOT" "GOPATH"))
-         (root (car output))
-         (paths (split-string (cadr output) path-separator)))
-    (cons root paths)))
+;; (defun go-root-and-paths ()
+;;   (let* ((output (process-lines go-command "env" "GOROOT" "GOPATH"))
+;;          (root (car output))
+;;          (paths (split-string (cadr output) path-separator)))
+;;     (cons root paths)))
+
 
 (defun go--string-prefix-p (s1 s2 &optional ignore-case)
   "Return non-nil if S1 is a prefix of S2.
@@ -1967,61 +2017,35 @@ addition to ordinary uses of GOPATH."
            gopath
            path-separator)))))
 
+(defun go-get-root ()
+  "Get GOROOT"
+  (car (process-lines go-command "env" "GOROOT")))
+
+(defun go-get-path ()
+  "Get GOPATH with `go-guess-gopath', if it return nil, get it with `go env GOPATH' command."
+  (or (go-guess-gopath) (process-lines go-command "env" "GOPATH")))
+
+(defun go-set-root-path ()
+  "Set `go-root' and `go-path' variables."
+  (defvar-local go-root (go-get-root)
+    "GOROOT local variable")
+
+  (defvar-local go-path (go-get-path)
+    "GOPATH local variable"))
+
+(add-hook 'go-mode-hook #'go-set-root-path)
+
+(defun go-root-and-paths ()
+  (let ((root (go-get-root))
+	(paths (split-string (go-get-path) path-separator)))
+    (cons root paths)))
+
 (defun go-plain-gopath ()
   "Detect a normal GOPATH, by looking for the first `src'
 directory up the directory tree."
   (let ((d (locate-dominating-file buffer-file-name "src")))
     (if d
         (list d))))
-
-(defun go-godep-gopath ()
-  "Detect a Godeps workspace by looking for Godeps/_workspace up
-the directory tree. The result is combined with that of
-`go-plain-gopath'."
-  (let* ((d (locate-dominating-file buffer-file-name "Godeps"))
-         (workspace (concat d
-                            (file-name-as-directory "Godeps")
-                            (file-name-as-directory "_workspace"))))
-    (if (and d
-             (file-exists-p workspace))
-        (list workspace
-              (locate-dominating-file buffer-file-name "src")))))
-
-(defun go-gb-gopath ()
-  "Detect a gb project."
-  (or (go--gb-vendor-gopath)
-      (go--gb-vendor-gopath-reverse)))
-
-(defun go--gb-vendor-gopath ()
-  (let* ((d (locate-dominating-file buffer-file-name "src"))
-         (vendor (concat d (file-name-as-directory "vendor"))))
-    (if (and d
-             (file-exists-p vendor))
-        (list d vendor))))
-
-(defun go--gb-vendor-gopath-reverse ()
-  (let* ((d (locate-dominating-file buffer-file-name "vendor"))
-         (src (concat d (file-name-as-directory "src"))))
-    (if (and d
-             (file-exists-p src))
-        (list d (concat d
-                        (file-name-as-directory "vendor"))))))
-
-(defun go-wgo-gopath ()
-  "Detect a wgo project."
-  (or (go--wgo-gocfg "src")
-      (go--wgo-gocfg "vendor")))
-
-(defun go--wgo-gocfg (needle)
-  (let* ((d (locate-dominating-file buffer-file-name needle))
-         (gocfg (concat d (file-name-as-directory ".gocfg"))))
-    (if (and d
-             (file-exists-p gocfg))
-        (with-temp-buffer
-          (insert-file-contents (concat gocfg "gopaths"))
-          (append
-           (mapcar (lambda (el) (concat d (file-name-as-directory el))) (split-string (buffer-string) "\n" t))
-           (list (go-original-gopath)))))))
 
 (defun go-set-project (&optional buffer)
   "Set GOPATH based on `go-guess-gopath' for BUFFER, or the current buffer if BUFFER is nil.
