@@ -248,6 +248,7 @@ results, but can be slower than `go-packages-native'."
   :group 'go)
 
 (defcustom go-guess-gopath-functions (list #'go-godep-gopath
+                                           #'go-glide-gopath
                                            #'go-wgo-gopath
                                            #'go-gb-gopath
                                            #'go-plain-gopath)
@@ -1978,6 +1979,11 @@ the directory tree. The result is combined with that of
              (file-exists-p workspace))
         (list workspace
               (locate-dominating-file buffer-file-name "src")))))
+
+(defun go-glide-gopath ()
+  "Detect a Glide workspace by looking for `glide.yaml' up the
+directory tree."
+  (locate-dominating-file buffer-file-name "glide.yaml"))
 
 (defun go-gb-gopath ()
   "Detect a gb project."
