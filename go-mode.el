@@ -1983,9 +1983,12 @@ the directory tree. The result is combined with that of
 (defun go-glide-gopath ()
   "Detect a Glide workspace by looking for `glide.yaml' up the
 directory tree."
-  (let ((d (locate-dominating-file buffer-file-name "glide.yaml")))
-    (if d
-        (list d))))
+  (let ((d (locate-dominating-file buffer-file-name "glide.yaml"))
+        (vendor (concat d (file-name-as-directory "vendor")))
+    (if (file-exists-p vendor)
+        (list d vendor)
+      (if d
+          (list d))))))
 
 (defun go-gb-gopath ()
   "Detect a gb project."
